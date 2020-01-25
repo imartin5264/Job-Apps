@@ -19,5 +19,33 @@ const GuiSchema = new mongoose.Schema({
     }
 });
 
-const Card = mongoose.model('GUI', GuiSchema); 
-module.exports = Card;
+const UserSchema = new mongoose.Schema({
+    name: {
+        type: String,
+        required: true
+    },
+    email: {
+        type: String,
+        required: true
+    },
+    password: {
+        type: String,
+        required: true
+    },
+    date: {
+        type: Date,
+        default: Date.now
+    },
+    restPasswordToken: {
+        type: String
+    },
+    restPasswordExpires: {
+        type: Date,
+        default: Date.now
+    },
+    decks: [GuiSchema]
+});
+
+const User = mongoose.model('User', UserSchema); //name of the model is 'User'
+module.exports = User;
+

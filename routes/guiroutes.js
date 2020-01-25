@@ -1,13 +1,14 @@
 const express = require('express');
 const router = express.Router();
-const Card = require('../models/Card');
+const User = require('../models/Card');
 const url = require('url');
 const myUrl = new URL('http://localhost:5000/card/:bolen/:id/:a');
 const passport = require('passport');
+const { ensureAuthenticated } = require('../config/blockaccess.js');
 
 
 
-router.get('/card/:deck/:bol/:id/:wrongcount/:error', async (req, res) => {
+router.get('/card/:deck/:bol/:id/:wrongcount/:error', ensureAuthenticated, async (req, res) => {
     let error = req.params.error;
     let card;
     let deck = req.params.deck;
@@ -17,12 +18,31 @@ router.get('/card/:deck/:bol/:id/:wrongcount/:error', async (req, res) => {
     let requestedQ = undefined;
     let requestedA = undefined;
     let currentId = undefined;
+    let deckqanda = [];
     try{
-        card = await Card.find({ deck : deck });
-        
-        requestedQ = card[cardIndex].question;
-        requestedA = card[cardIndex].answer;
-        currentId = card[cardIndex]._id;        
+        console.log(req.user.name);
+        card = await User.findOne({name: req.user.name});
+        console.log(card);
+        subcollection = card.decks;
+        console.log('important thing', subcollection);
+        for(let i = 0; i < subcollection.length; i++){
+            console.log('logging subcollection index', subcollection[i].deck);
+            console.log('user selected deck', deck);
+            if(subcollection[i].deck == deck){
+                console.log('logging subcollection index', subcollection[i].deck);
+                console.log('user selected deck', deck);
+                deckqanda.push(subcollection[i]);
+                                
+            }
+            
+        }
+        console.log(deckqanda);
+        requestedQ = deckqanda[cardIndex].question;
+        console.log(requestedQ);
+        requestedA = deckqanda[cardIndex].answer;
+        console.log(requestedA);
+        currentId = deckqanda[cardIndex]._id;
+        console.log(currentId);
         res.render('qanda', {
             question: requestedQ,
             answer: requestedA,
@@ -46,21 +66,25 @@ router.get('/card/:deck/:bol/:id/:wrongcount/:error', async (req, res) => {
     
 });
 
-router.get('/card', (req, res) => {
+router.get('/card', ensureAuthenticated, (req, res) => {
     res.render('card.ejs');
 });
 
 router.get('/card/deck', async (req, res) => {
     let card;
+    let subcollection;
     let idlist = [];
     let nodup = [];
     let count = 0;
     let found = false;
     try{
-        card = await Card.find();
-        for(let i = 0; i < card.length; i++){
-            console.log(card[i].deck);
-            idlist.push(card[i].deck);
+        console.log(req.user.name);
+        card = await User.findOne({name: req.user.name});
+        console.log(card);
+        subcollection = card.decks;
+        for(let i = 0; i < subcollection.length; i++){
+            console.log(subcollection[i].deck);
+            idlist.push(subcollection[i].deck);
         }
         console.log(idlist);
         for( i = 0; i < idlist.length; i++){
@@ -97,12 +121,21 @@ router.get('/card/deck', async (req, res) => {
 
 
 
-router.get('/gui', async (req, res) => {
+router.get('/gui', ensureAuthenticated, async (req, res) => {
     let card;
+    let subcollection;
+    
+    
+    //console.log(card);
     try{
-        card = await Card.find();
+        console.log(req.user.name);
+        card = await User.findOne({name: req.user.name});
+        console.log(card);
+        subcollection = card.decks;
+        console.log('important thing', subcollection);
+        
         res.render('gui.ejs',{
-            alldata : card
+            alldata : subcollection
         });
         console.log("Info gathered");
     }catch{
@@ -113,43 +146,54 @@ router.get('/gui', async (req, res) => {
             console.log('issue with gathering data');
         }
     }
-    console.log(card);
 });
-router.post('/gui', async (req, res) => {
+router.post('/gui', ensureAuthenticated, async (req, res) => {
     const {question, answer, deck} = req.body;
     let cards;
     //console.log(req.body);
-    if(!question || !answer) {
+    if(!question || !answer || !deck) {
         console.log("Please fill in all fields");
     }else{
-        await Card.findOne({question: question})
-        .then( async qa => {
-            if(qa){
-                console.log(("Question found in DB"))
+        try{
+            console.log(req.user.name);
+            card = await User.findOne({name: req.user.name});
+            console.log(card);
+            subcollection = card.decks;
+            console.log('important thing', subcollection);
+            subcollection.push({
+                question: question,
+                answer: answer,
+                deck: deck
+            });
+            await card.save();
+            res.render('gui.ejs',{
+                alldata : subcollection
+            });
+            console.log("Info gathered");
+        }catch{
+            if (card == null){
+                res.redirect('http://localhost:5000/gui');
+                console.log('Questions not found');
             }else{
-                const card = new Card({
-                    question,
-                    answer,
-                    deck
-                });
-                await card.save();
-                cards = await Card.find();
-                res.render('gui.ejs',{
-                    alldata : cards
-                }); 
+                console.log('issue with gathering data');
             }
-        })
+        }
         
     }
     
 });
 
-router.get('/gui/edit', async (req, res) => {
+router.get('/gui/edit', ensureAuthenticated, async (req, res) => {
     let cards;
+    let id;
     try{
-        cards = await Card.find();
+        console.log(req.user.name);
+        cards = await User.findOne({name: req.user.name});
+        console.log(cards);
+        subcollection = cards.decks;
+        console.log('important thing', subcollection, 'stop');
         res.render('edit.ejs',{
-            choiceedit : cards
+            choiceedit : subcollection
         });
     }catch{
         if (cards == null){
@@ -161,24 +205,37 @@ router.get('/gui/edit', async (req, res) => {
     }
 });
 
-router.get('/gui/edit/:cardid', async (req, res) => {
+router.get('/gui/edit/:cardid', ensureAuthenticated, async (req, res) => {
     console.log(req.params.cardid);
     let cardinfo = req.params.cardid;
     console.log(cardinfo);
     let card;
+    
     try{
-        console.log(cardinfo);
-        card = await Card.findOne({ _id: cardinfo });
+        console.log(req.user.name);
+        card = await User.findOne({name: req.user.name});
         console.log(card);
-        let editQ = card.question;
-        let editA = card.answer;
-        let editD = card.deck;
-        res.render('lastedit.ejs',{
-            editQ,
-            editA,
-            editD,
-            cardinfo
-        });
+        subcollection = card.decks;
+        console.log('important thing', subcollection);
+        for(let i = 0; i < subcollection.length; i++){
+            console.log('logging subcollection index', subcollection[i]._id);
+            if(subcollection[i]._id == cardinfo){
+                console.log('logging subcollection index Pt2', subcollection[i]._id);
+                let selectedEdit = subcollection[i];
+                let editQ = selectedEdit.question;
+                let editA = selectedEdit.answer;
+                let editD = selectedEdit.deck;
+                res.render('lastedit.ejs',{
+                    editQ,
+                    editA,
+                    editD,
+                    cardinfo
+                });
+            }else{
+                console.log('Subcollection Requested ID Not Found');
+            }
+        }
+        
     }catch{
         if (card == null){
             console.log(titty);
@@ -188,15 +245,17 @@ router.get('/gui/edit/:cardid', async (req, res) => {
             console.log('another issue with gathering data');
         }
     }
-    res.render('edit.ejs');
 });
 
-router.get('/gui/delete', async (req, res) => {
+router.get('/gui/delete', ensureAuthenticated, async (req, res) => {
     let cards;
     try{
-        cards = await Card.find();
+        cards = await User.findOne({name: req.user.name});
+        console.log(cards);
+        subcollection = cards.decks;
+        console.log('important thing', subcollection, 'stop');
         res.render('delete.ejs',{
-            allinfo : cards
+            allinfo : subcollection
         });
     }catch{
         if (cards == null){
@@ -209,22 +268,35 @@ router.get('/gui/delete', async (req, res) => {
 });
 
 
-router.put('/gui/edit/:cardid', async (req, res) => {
+router.put('/gui/edit/:cardid', ensureAuthenticated, async (req, res) => {
     let card;
     let id = req.params.cardid;
     console.log(id);
     try{
-        card = await Card.findOne({ _id: id });
-        card.question = req.body.question;
-        console.log(card.question);
-        card.answer = req.body.answer;
-        console.log(card.answer);
-        card.deck = req.body.deck;
-        console.log(card.deck);
-        await card.save();
+        console.log(req.user.name);
+        card = await User.findOne({name: req.user.name});
         console.log(card);
-        res.redirect('http://localhost:5000/gui');
-        console.log("Info changed");
+        subcollection = card.decks;
+        console.log('important thing', subcollection);
+        for(let i = 0; i < subcollection.length; i++){
+            console.log('logging subcollection index', subcollection[i]._id);
+            if(subcollection[i]._id == id){
+                console.log('logging subcollection index Pt2', subcollection[i]._id);
+                let selectedEdit = subcollection[i];
+                selectedEdit.question = req.body.question;
+                console.log(selectedEdit.question);
+                selectedEdit.answer = req.body.answer;
+                console.log(selectedEdit.answer);
+                selectedEdit.deck = req.body.deck;
+                console.log(selectedEdit.deck);
+                await card.save();
+                console.log(card);
+                res.redirect('http://localhost:5000/gui');
+                console.log("Info changed");
+            }else{
+                console.log('Subcollection Requested ID Not Found');
+            }
+        }
     }catch{
         if (card == null){
             res.redirect('http://localhost:5000/gui');
@@ -235,24 +307,35 @@ router.put('/gui/edit/:cardid', async (req, res) => {
     }
 });
 
-router.get('/gui/delete/:deleteid', async (req, res) => {
+router.get('/gui/delete/:deleteid', ensureAuthenticated, async (req, res) => {
     console.log(req.params.deleteid);
     let cardinfo = req.params.deleteid;
     console.log(cardinfo);
     let card;
     try{
-        console.log(cardinfo);
-        card = await Card.findOne({ _id: cardinfo });
+        console.log(req.user.name);
+        card = await User.findOne({name: req.user.name});
         console.log(card);
-        let editQ = card.question;
-        let editA = card.answer;
-        let editD = card.deck;
-        res.render('lastdelete.ejs',{
-            editQ,
-            editA,
-            editD,
-            cardinfo
-        });
+        subcollection = card.decks;
+        console.log('important thing', subcollection);
+        for(let i = 0; i < subcollection.length; i++){
+            console.log('logging subcollection index', subcollection[i]._id);
+            if(subcollection[i]._id == cardinfo){
+                console.log('logging subcollection index Pt2', subcollection[i]._id);
+                let selectedEdit = subcollection[i];
+                let editQ = selectedEdit.question;
+                let editA = selectedEdit.answer;
+                let editD = selectedEdit.deck;
+                res.render('lastdelete.ejs',{
+                    editQ,
+                    editA,
+                    editD,
+                    cardinfo
+                });
+            }else{
+                console.log('Subcollection Requested ID Not Found');
+            }
+        }
     }catch{
         if (card == null){
             console.log(titty);
@@ -264,13 +347,26 @@ router.get('/gui/delete/:deleteid', async (req, res) => {
     }
 })
 
-router.delete('/gui/delete/:deleteid', async (req, res) => {
+router.delete('/gui/delete/:deleteid', ensureAuthenticated, async (req, res) => {
     let card;
     try{
-        card = await Card.findOne({_id: req.params.deleteid});
-        await card.remove();
-        res.redirect('http://localhost:5000/gui');
-        console.log("Info deleted");
+        console.log(req.user.name);
+        card = await User.findOne({name: req.user.name});
+        console.log(card);
+        subcollection = card.decks;
+        console.log('important thing', subcollection);
+        for(let i = 0; i < subcollection.length; i++){
+            console.log('logging subcollection index', subcollection[i]._id);
+            if(subcollection[i]._id == req.params.deleteid){
+                console.log('logging subcollection index Pt2', subcollection[i]._id);
+                console.log(i);
+                subcollection.splice(i, 1);
+                await card.save();
+                res.redirect('http://localhost:5000/gui');
+            }else{
+                console.log('Subcollection Requested ID Not Found');
+            }
+        }
     }catch{
         if (card == null){
             res.redirect('http://localhost:5000/gui');
